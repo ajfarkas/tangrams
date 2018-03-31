@@ -18,16 +18,28 @@
 			height: 400px;
 		}
 		svg {
-			height: 400px;
 			fill: peru;
+			pointer-events: none;
+		}
+		svg.is-active {
+			z-index: 2;
+			fill: seagreen;
+		}
+		svg:not(.is-active) polygon {
+			stroke-width: 0.2px;
+			stroke: black;
+			stroke-opacity: 0.2;
 		}
 		text {
 			fill: black;
 			font-size: 6px;
-			pointer-events: none;
+		}
+		polygon {
+			pointer-events: all;
 		}
 		#info {
 			position: fixed;
+			z-index: 9;
 			top: 2px;
 			right: 2px;
 			padding: 10px;
@@ -98,7 +110,7 @@
 			</datalist>
 		</label>
 	</div>
-	<section>
+	<section id="canvas">
 		<svg id="a1" viewbox="0 0 48 96">
 			<polygon points="0,0 35.875,0 35.5625,48 0,48"/>
 			<text x="16" y="24">A1</text>
@@ -150,10 +162,42 @@
 			dragStartX = 0,
 			dragStartY = 0;
 
+	function findCenter(svg) {
+		const viewboxAttr = svg.getAttribute('viewBox').split(' '),
+					polygonAttr = svg.querySelector('polygon').getAttribute('points').split(' '),
+					polygonPtLen = polygonAttr.length,
+					box = {
+						width: viewboxAttr[2] - viewboxAttr[0],
+						height: viewboxAttr[3] - viewboxAttr[1],
+					},
+					sumX = polygonAttr.reduce((a, b) => (
+						(typeof a === 'number' ? a : parseFloat(a.split(',')[0])) + parseFloat(b.split(',')[0])
+					)),
+					sumY = polygonAttr.reduce((a, b) => (
+						(typeof a === 'number' ? a : parseFloat(a.split(',')[1])) + parseFloat(b.split(',')[1])
+					)),
+					avgX = sumX / polygonPtLen,
+					avgY = sumY / polygonPtLen,
+					percentX = (avgX - parseFloat(viewboxAttr[0])) / box.width * 100,
+					percentY = (avgY - parseFloat(viewboxAttr[1])) / box.height * 100;
+		return `${percentX}% ${percentY}%`;
+	}
+
+	function initActiveSVG(e) {
+		if (activeSVG) {
+			activeSVG.classList.remove('is-active');
+		}
+		activeSVG = e.currentTarget.parentElement;
+		activeSVG.classList.add('is-active');
+		activeWall.innerText = activeSVG.id;
+		rotation.value = activeSVG.style.transform.match('rotate')
+			? parseInt(activeSVG.style.transform.match(/rotate\((-?\d+)/)[1])
+			: 0;
+	}
+
 	function activateSVG(e) {
 		if (activeSVG !== e.currentTarget.parentElement) {
-			activeSVG = e.currentTarget.parentElement;
-			activeWall.innerText = activeSVG.id;
+			initActiveSVG(e);
 		}
 		if (rotation.getAttribute('disabled') !== null) {
 			rotation.removeAttribute('disabled');
@@ -161,13 +205,13 @@
 		boundingRect = activeSVG.getBoundingClientRect();
 		clickOffsetX = e.pageX;
 		clickOffsetY = e.pageY;
-		dragStartX = boundingRect.x - e.x + e.pageX,
-		dragStartY = boundingRect.y - e.y + e.pageY,
-		activeSVG.style.transformOrigin = `${e.layerX}px ${e.layerY}px`;
+		dragStartX = parseInt(activeSVG.style.left),
+		dragStartY = parseInt(activeSVG.style.top),
 		window.addEventListener('mousemove', dragSVG);
 	}
 
 	function deactivateSVG() {
+		activeSVG.classList.remove('is-active');
 		activeSVG = null;
 		activeWall.innerText = '(none)';
 		rotation.setAttribute('disabled', true);
@@ -179,8 +223,8 @@
 		}
 		const deltaX = e.pageX - clickOffsetX,
 					deltaY = e.pageY - clickOffsetY
-		activeSVG.style.top = `${dragStartY + deltaY}px`;
-		activeSVG.style.left = `${dragStartX + deltaX}px`;
+					activeSVG.style.top = `${dragStartY + deltaY}px`;
+					activeSVG.style.left = `${dragStartX + deltaX}px`;
 	}
 
 	function nudgeSVG(e) {
@@ -226,11 +270,16 @@
 	window.scrollTo(0,0);
 	// init SVGs for movement
 	for (let i = svgLen - 1; i >= 0; i--) {
+		const center = findCenter(svgs[i]),
+					centerPct = center.replace('%', '').split(' ').map(p => parseFloat(p) / 100);
+
 		svgs[i].querySelector('polygon').addEventListener('mousedown', activateSVG);
 		boundingRect = svgs[i].getBoundingClientRect();
 		svgs[i].style.top = `${boundingRect.y}px`;
 		svgs[i].style.left = `${boundingRect.x}px`;
 		svgs[i].style.position = 'absolute';
+		svgs[i].style.transformOrigin = center;
+		svgs[i].dataset.center = `${boundingRect.width * centerPct[0]};${boundingRect.height * centerPct[1]}`;
 	}
 
 	window.addEventListener('mouseup', () => {
