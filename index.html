@@ -67,15 +67,17 @@
 <body>
 	<legend id="info">
 		<p>Active Wall: <span id="active-wall">(none)</span></p>
-		<button type="button" tabindex="1" onclick="deactivateSVG()">deselect wall</button>
+		<button id="deselect" type="button" tabindex="1" onclick="deactivateSVG()">deselect wall</button>
+		<button id="default-shapes" type="button" tabindex="1" onclick="useDefault()">Use default shapes</button>
 	</legend>
-	<section>
+	<section id="canvas">
 		<div class="board"></div>
 		<div class="board"></div>
 		<div class="board"></div>
 		<div class="board"></div>
 		<div class="board"></div>
 		<div class="board"></div>
+		<div id="shapes"></div>
 	</section>
 	<div class="controls">
 		<label>
@@ -110,7 +112,9 @@
 			</datalist>
 		</label>
 	</div>
-	<section id="canvas">
+</body>
+<script type="text/javascript">
+	const defaultShapes = `
 		<svg id="a1" viewbox="0 0 48 96">
 			<polygon points="0,0 35.875,0 35.5625,48 0,48"/>
 			<text x="16" y="24">A1</text>
@@ -120,7 +124,7 @@
 			<text x="16" y="24">A2</text>
 		</svg>
 		<svg id="a-kick" viewbox="0 0 48 96">
-			<polygon points="0,0 48,0 48,16.25, 0,16.25"/>
+			<polygon points="0,0 35.25,0 35.25,16.25, 0,16.25"/>
 			<text x="10" y="8">A kick</text>
 		</svg>
 		<svg id="d" viewbox="0 0 48 96">
@@ -144,11 +148,11 @@
 			<text x="18" y="18">B-R</text>
 		</svg>
 		<svg id="c-top" viewbox="0 0 48 96">
-			<polygon points="0,0 0,54 33.044,21.64"/>
+			<polygon points="0,38.625 46,38.625 8.25,0"/>
 			<text x="10" y="26">C-T</text>
 		</svg>
 		<svg id="c-left" viewbox="0 0 48 96">
-			<polygon points="0,0 17,0.125 17,17.875 4.25,64.875 0,64.875"/>
+			<polygon points="0,0 17,0.125 17,17.875 4.25,71.875 0,71.875"/>
 			<text x="3" y="18">C-L</text>
 		</svg>
 		<svg id="c-center" viewbox="0 0 48 96">
@@ -158,21 +162,31 @@
 		<svg id="c-right" viewbox="0 0 48 96">
 			<polygon points="0,0 44,46.875 44,65.625 0,65.25"/>
 			<text x="14" y="46">C-R</text>
-		</svg>
-	</section>
-</body>
-<script type="text/javascript">
-	const svgs = document.querySelectorAll('svg'),
-				svgLen = svgs.length,
+			</svg>
+	`;
+	const canvasEl = document.getElementById('canvas'),
+				shapesEl = document.getElementById('shapes'),
 				activeWall = document.getElementById('active-wall'),
-				rotation = document.getElementById('rotate');
+				rotation = document.getElementById('rotate'),
+				defaultShapesBtn = document.getElementById('default-shapes');
 
-	let activeSVG = null,
+	let usingDefault = false;
+			activeSVG = null,
 			boundingRect = null,
 			clickOffsetX = 0,
 			clickOffsetY = 0,
 			dragStartX = 0,
 			dragStartY = 0;
+
+	function useDefault() {
+		window.scrollTo(0,0);
+		if (!usingDefault) {
+			usingDefault = true;
+			defaultShapesBtn.innerText = 'reset shapes';
+		}
+		shapesEl.innerHTML = defaultShapes;
+		initShapes();
+	}
 
 	function findCenter(svg) {
 		const viewboxAttr = svg.getAttribute('viewBox').split(' '),
@@ -195,11 +209,11 @@
 		return `${percentX}% ${percentY}%`;
 	}
 
-	function initActiveSVG(e) {
+	function initActiveSVG(el) {
 		if (activeSVG) {
 			activeSVG.classList.remove('is-active');
 		}
-		activeSVG = e.currentTarget.parentElement;
+		activeSVG = el;
 		activeSVG.classList.add('is-active');
 		activeWall.innerText = activeSVG.id;
 		rotation.value = activeSVG.style.transform.match('rotate')
@@ -208,8 +222,15 @@
 	}
 
 	function activateSVG(e) {
-		if (activeSVG !== e.currentTarget.parentElement) {
-			initActiveSVG(e);
+		const polygon = e.target.closest('polygon');
+		if (!polygon) {
+			if (activeSVG) {
+				deactivateSVG();
+			}
+			return false;
+		}
+		if (activeSVG !== polygon.parentElement) {
+			initActiveSVG(polygon.parentElement);
 		}
 		if (rotation.getAttribute('disabled') !== null) {
 			rotation.removeAttribute('disabled');
@@ -280,24 +301,29 @@
 
 	// start at the top of the page
 	window.scrollTo(0,0);
-	// init SVGs for movement
-	for (let i = svgLen - 1; i >= 0; i--) {
-		const center = findCenter(svgs[i]),
-					centerPct = center.replace('%', '').split(' ').map(p => parseFloat(p) / 100);
 
-		svgs[i].querySelector('polygon').addEventListener('mousedown', activateSVG);
-		boundingRect = svgs[i].getBoundingClientRect();
-		svgs[i].style.top = `${boundingRect.y}px`;
-		svgs[i].style.left = `${boundingRect.x}px`;
-		svgs[i].style.position = 'absolute';
-		svgs[i].style.transformOrigin = center;
-		svgs[i].dataset.center = `${boundingRect.width * centerPct[0]};${boundingRect.height * centerPct[1]}`;
+	function initShapes() {
+		const svgs = document.querySelectorAll('svg'),
+					svgLen = svgs.length;
+		// init SVGs for movement
+		for (let i = svgLen - 1; i >= 0; i--) {
+			const center = findCenter(svgs[i]),
+						centerPct = center.replace('%', '').split(' ').map(p => parseFloat(p) / 100);
+
+			boundingRect = svgs[i].getBoundingClientRect();
+			svgs[i].style.top = `${boundingRect.y}px`;
+			svgs[i].style.left = `${boundingRect.x}px`;
+			svgs[i].style.position = 'absolute';
+			svgs[i].style.transformOrigin = center;
+			svgs[i].dataset.center = `${boundingRect.width * centerPct[0]};${boundingRect.height * centerPct[1]}`;
+		}
+
+		window.addEventListener('mouseup', () => {
+			window.removeEventListener('mousemove', dragSVG);
+		});
+		window.addEventListener('keydown', nudgeSVG);
+		canvasEl.addEventListener('mousedown', activateSVG);
+		rotation.addEventListener('input', rotateSVG);
 	}
-
-	window.addEventListener('mouseup', () => {
-		window.removeEventListener('mousemove', dragSVG);
-	});
-	window.addEventListener('keydown', nudgeSVG);
-	rotation.addEventListener('input', rotateSVG);
 </script>
 </html>
